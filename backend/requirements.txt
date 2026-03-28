@@ -1,0 +1,8 @@
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+google-generativeai==0.8.0
+httpx==0.28.0
+trafilatura==2.0.0
+python-multipart==0.0.18
+pillow==11.0.0
+beautifulsoup4==4.12.3
