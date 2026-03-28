@@ -54,7 +54,7 @@ async def retrieve_evidence(claims: list, original_query: str) -> dict:
 
     return {
         "fact_checks": all_fact_checks,
-        "sources": all_sources[:6],  # Cap at 6 sources
+        "sources": all_sources[:10],
     }
 
 
@@ -72,7 +72,7 @@ async def _search_fact_checks(client: httpx.AsyncClient, query: str, api_key: st
         resp = await client.get(FACT_CHECK_API, params=params)
         
         if resp.status_code != 200:
-            # Try Hindi
+            # Try Hindi for Indian claims
             params["languageCode"] = "hi"
             resp = await client.get(FACT_CHECK_API, params=params)
             if resp.status_code != 200:
@@ -81,7 +81,7 @@ async def _search_fact_checks(client: httpx.AsyncClient, query: str, api_key: st
         data = resp.json()
         results = []
 
-        for claim in data.get("claims", [])[:3]:
+        for claim in data.get("claims", [])[:5]:
             for review in claim.get("claimReview", [])[:1]:
                 results.append({
                     "claim_text": claim.get("text", ""),
@@ -108,7 +108,7 @@ async def _web_search(
             "key": api_key,
             "cx": engine_id,
             "q": f"fact check {query[:150]}",
-            "num": 5,
+            "num": 10,
         }
         resp = await client.get(GOOGLE_SEARCH_API, params=params)
         
@@ -118,7 +118,7 @@ async def _web_search(
         data = resp.json()
         results = []
 
-        for item in data.get("items", [])[:5]:
+        for item in data.get("items", [])[:10]:
             results.append({
                 "name": item.get("displayLink", item.get("link", "")),
                 "url": item.get("link", ""),

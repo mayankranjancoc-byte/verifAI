@@ -19,6 +19,67 @@ GDELT_API = "https://api.gdeltproject.org/api/v2/doc/doc"
 WIKIPEDIA_API = "https://en.wikipedia.org/api/rest_v1/page/summary"
 NEWSAPI_URL = "https://newsapi.org/v2/everything"
 
+# ── Trusted / well-known domains ──
+# Sources from these domains are prioritized in the output and displayed first.
+TRUSTED_DOMAINS = {
+    # Indian Government & Institutional
+    "pib.gov.in", "pibindia.wordpress.com", "india.gov.in", "mohfw.gov.in",
+    "icmr.gov.in", "mygov.in",
+    # Indian Fact-Checkers
+    "altnews.in", "boomlive.in", "thequint.com", "factly.in", "vishvasnews.com",
+    "newschecker.in", "factchecker.in",
+    # Indian News (Major)
+    "timesofindia.indiatimes.com", "ndtv.com", "thehindu.com",
+    "indianexpress.com", "hindustantimes.com", "livemint.com",
+    "economictimes.indiatimes.com", "news18.com", "scroll.in",
+    "thewire.in", "deccanherald.com",
+    # International Wire Services & Major Outlets
+    "reuters.com", "apnews.com", "afp.com",
+    "bbc.com", "bbc.co.uk",
+    "nytimes.com", "washingtonpost.com", "theguardian.com",
+    "cnn.com", "aljazeera.com", "dw.com",
+    # International Fact-Checkers
+    "snopes.com", "politifact.com", "factcheck.org", "fullfact.org",
+    # Science & Health
+    "who.int", "cdc.gov", "nih.gov", "nature.com", "sciencedirect.com",
+    "thelancet.com", "bmj.com",
+    # Tech (for tech-related claims)
+    "techcrunch.com", "arstechnica.com", "wired.com",
+}
+
+
+def _is_trusted_domain(url: str) -> bool:
+    """Check if a URL belongs to a trusted/well-known domain."""
+    try:
+        from urllib.parse import urlparse
+        hostname = urlparse(url).hostname or ""
+        hostname = hostname.replace("www.", "")
+        return hostname in TRUSTED_DOMAINS
+    except Exception:
+        return False
+
+
+def _get_domain_name(url: str) -> str:
+    """Extract a clean domain name from a URL."""
+    try:
+        from urllib.parse import urlparse
+        hostname = urlparse(url).hostname or ""
+        return hostname.replace("www.", "")
+    except Exception:
+        return url
+
+
+def _source_sort_key(source: dict) -> tuple:
+    """Sort sources: fact-checkers first, then trusted, then others."""
+    url = source.get("url", "")
+    stance = source.get("stance", "neutral")
+    is_trusted = _is_trusted_domain(url)
+    # Priority: contradicts (fact-checked denial) > supports > neutral
+    # Within each: trusted domains first
+    stance_order = 0 if stance == "contradicts" else (1 if stance == "supports" else 2)
+    trust_order = 0 if is_trusted else 1
+    return (stance_order, trust_order)
+
 
 async def verify_claims(claims: list, original_query: str) -> dict:
     """
@@ -122,7 +183,7 @@ async def verify_claims(claims: list, original_query: str) -> dict:
                 "unverifiable": unverifiable,
                 "confirmed_by": confirmed_by[:3],
                 "contradicted_by": contradicted_by[:3],
-                "corroborating": corroborating[:3],
+                "corroborating": corroborating[:5],
                 "confidence": min(100, total_authoritative * 25 + total_coverage * 5) if not unverifiable else 0,
             })
 
@@ -135,9 +196,12 @@ async def verify_claims(claims: list, original_query: str) -> dict:
             seen_urls.add(url)
             unique_sources.append(s)
 
+    # Sort: fact-checked + trusted domains first, then others
+    unique_sources.sort(key=_source_sort_key)
+
     return {
         "verified_claims": verified_claims,
-        "sources": unique_sources[:10],
+        "sources": unique_sources[:15],
         "total_sources_queried": len(all_sources),
     }
 
@@ -170,11 +234,15 @@ async def _query_fact_check(client: httpx.AsyncClient, query: str, api_key: str)
         params = {"query": query[:200], "key": api_key, "languageCode": "en"}
         resp = await client.get(FACT_CHECK_API, params=params)
         if resp.status_code != 200:
-            return []
+            # Retry with Hindi for Indian claims
+            params["languageCode"] = "hi"
+            resp = await client.get(FACT_CHECK_API, params=params)
+            if resp.status_code != 200:
+                return []
 
         data = resp.json()
         results = []
-        for claim in data.get("claims", [])[:3]:
+        for claim in data.get("claims", [])[:5]:
             for review in claim.get("claimReview", [])[:1]:
                 results.append({
                     "claim_text": claim.get("text", ""),
@@ -193,19 +261,44 @@ async def _query_fact_check(client: httpx.AsyncClient, query: str, api_key: str)
 async def _query_gdelt(client: httpx.AsyncClient, query: str) -> list:
     """Query GDELT for global news coverage. Free, no key needed."""
     try:
+        # Add domain filter to prefer trusted sources
+        trusted_filter = " OR ".join([f"domain:{d}" for d in [
+            "bbc.com", "reuters.com", "ndtv.com", "timesofindia.indiatimes.com",
+            "thehindu.com", "altnews.in", "boomlive.in", "apnews.com",
+        ]])
+        enhanced_query = f"({query[:100]}) ({trusted_filter})"
+
         params = {
-            "query": query[:150],
+            "query": enhanced_query[:500],
             "mode": "ArtList",
-            "maxrecords": "5",
+            "maxrecords": "10",
             "format": "json",
             "sort": "DateDesc",
         }
         resp = await client.get(GDELT_API, params=params)
+
+        # If domain-filtered query returns nothing, fallback to plain query
         if resp.status_code != 200:
-            return []
+            params["query"] = query[:150]
+            resp = await client.get(GDELT_API, params=params)
+            if resp.status_code != 200:
+                return []
 
         data = resp.json()
         articles = data.get("articles", [])
+
+        # If domain filter was too strict and returned nothing, retry plain
+        if not articles:
+            params["query"] = query[:150]
+            params["maxrecords"] = "10"
+            resp = await client.get(GDELT_API, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                articles = data.get("articles", [])
+
+        # Sort: trusted domains first
+        articles.sort(key=lambda a: 0 if _is_trusted_domain(a.get("url", "")) else 1)
+
         return [
             {
                 "title": a.get("title", ""),
@@ -213,7 +306,7 @@ async def _query_gdelt(client: httpx.AsyncClient, query: str) -> list:
                 "domain": a.get("domain", ""),
                 "date": a.get("seendate", ""),
             }
-            for a in articles[:5]
+            for a in articles[:10]
         ]
     except Exception as e:
         print(f"[Verifier] GDELT error: {e}")
@@ -225,20 +318,44 @@ async def _query_newsapi(client: httpx.AsyncClient, query: str, api_key: str) ->
     if not api_key:
         return []
     try:
+        # Prefer trusted Indian + international domains
         params = {
             "q": query[:100],
             "apiKey": api_key,
             "sortBy": "relevancy",
-            "pageSize": 5,
+            "pageSize": 10,
             "language": "en",
+            "domains": ",".join([
+                "bbc.co.uk", "reuters.com", "apnews.com",
+                "ndtv.com", "timesofindia.indiatimes.com", "thehindu.com",
+                "indianexpress.com", "hindustantimes.com",
+                "theguardian.com", "aljazeera.com",
+            ]),
         }
         resp = await client.get(NEWSAPI_URL, params=params)
-        if resp.status_code != 200:
-            print(f"[Verifier] NewsAPI error: {resp.status_code}")
-            return []
 
-        data = resp.json()
-        return data.get("articles", [])[:5]
+        articles = []
+        if resp.status_code == 200:
+            data = resp.json()
+            articles = data.get("articles", [])
+
+        # If domain filter was too strict, retry without domain filter
+        if len(articles) < 3:
+            params.pop("domains", None)
+            params["pageSize"] = 10
+            resp = await client.get(NEWSAPI_URL, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+                # Merge: keep domain-filtered results first, add others
+                seen = {a.get("url") for a in articles}
+                for a in data.get("articles", []):
+                    if a.get("url") not in seen:
+                        articles.append(a)
+
+        # Sort: trusted domains first
+        articles.sort(key=lambda a: 0 if _is_trusted_domain(a.get("url", "")) else 1)
+
+        return articles[:10]
     except Exception as e:
         print(f"[Verifier] NewsAPI error: {e}")
         return []
