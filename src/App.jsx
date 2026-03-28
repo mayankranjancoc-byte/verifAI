@@ -4,7 +4,10 @@ import ChatMessage from './components/ChatMessage'
 import Welcome from './components/Welcome'
 import HistorySidebar from './components/HistorySidebar'
 
-const API_URL = '/api/analyze'
+// In dev: empty string (Vite proxy handles /api/* → localhost:8001)
+// In prod: full Render backend URL (e.g. https://verifai-9uho.onrender.com)
+const API_BASE = import.meta.env.VITE_API_URL || ''
+const API_URL = `${API_BASE}/api/analyze`
 
 function loadHistory() {
   try {
@@ -115,7 +118,7 @@ export default function App() {
       formData.append('content', originalContent || '')
       formData.append('cached_claims', cachedClaims)
 
-      const res = await fetch('/api/reverify', {
+      const res = await fetch(`${API_BASE}/api/reverify`, {
         method: 'POST',
         body: formData
       })

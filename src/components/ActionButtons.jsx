@@ -16,6 +16,18 @@ export default function ActionButtons({ sources, onReanalyze, timestamp }) {
     }
   }
 
+  // Safely extract hostname from URL
+  const getHostname = (url) => {
+    try {
+      return new URL(url).hostname.replace('www.', '')
+    } catch {
+      return url
+    }
+  }
+
+  // Filter valid sources (must have url)
+  const validSources = (sources || []).filter(s => s && s.url)
+
   return (
     <>
       <div className="actions">
@@ -25,6 +37,19 @@ export default function ActionButtons({ sources, onReanalyze, timestamp }) {
         >
           <span className="material-symbols-outlined">visibility</span>
           {showSources ? 'Hide Sources' : 'View Sources'}
+          {validSources.length > 0 && (
+            <span style={{
+              background: 'var(--accent)',
+              color: '#fff',
+              borderRadius: '10px',
+              padding: '1px 6px',
+              fontSize: '10px',
+              marginLeft: '4px',
+              fontWeight: 600,
+            }}>
+              {validSources.length}
+            </span>
+          )}
         </button>
         <button className="action-btn action-btn--default" onClick={handleShare}>
           <span className="material-symbols-outlined">share</span>
@@ -43,26 +68,30 @@ export default function ActionButtons({ sources, onReanalyze, timestamp }) {
         </div>
       )}
 
-      {showSources && sources && sources.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
-          {sources.map((s, i) => (
-            <a
-              key={i}
-              href={s.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: 'flex', alignItems: 'center', gap: '6px',
-                padding: '8px 12px', background: 'var(--surface-low)',
-                borderRadius: 'var(--radius-md)', fontSize: '12px',
-                color: 'var(--accent)', textDecoration: 'none',
-                transition: 'background 0.15s ease'
-              }}
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>open_in_new</span>
-              {s.name || new URL(s.url).hostname}
-            </a>
-          ))}
+      {showSources && (
+        <div className="sources-panel">
+          {validSources.length === 0 ? (
+            <div className="sources-panel__empty">
+              <span className="material-symbols-outlined">search_off</span>
+              No external sources found for this analysis
+            </div>
+          ) : (
+            validSources.map((s, i) => (
+              <a
+                key={i}
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="sources-panel__item"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--accent)' }}>open_in_new</span>
+                <div className="sources-panel__info">
+                  <span className="sources-panel__name">{s.name || getHostname(s.url)}</span>
+                  <span className="sources-panel__url">{getHostname(s.url)}</span>
+                </div>
+              </a>
+            ))
+          )}
         </div>
       )}
     </>
