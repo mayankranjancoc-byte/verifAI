@@ -1,0 +1,22 @@
+# Render Blueprint — auto-configures the service on Render.com
+# https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: verifai
+    runtime: python
+    buildCommand: bash build.sh
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: NEWS_API_KEY
+        sync: false
+      - key: GOOGLE_FACT_CHECK_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: NODE_VERSION
+        value: 20.18.0
