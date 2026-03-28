@@ -1,7 +1,7 @@
 """
 Humor Generator — Generates Hinglish jokes/roasts about misinformation.
 Always pairs humor with a clear factual explanation.
-Uses Gemini with high temperature for culturally aware, context-sensitive humor.
+SENSITIVITY FILTER: Suppresses jokes for sensitive topics (death, accidents, etc.)
 """
 
 from pipeline.gemini_client import generate_with_fallback, parse_json_response
@@ -41,8 +41,21 @@ Respond in JSON (no markdown):
 """
 
 
-async def generate_humor(content: str, verdict: str, claims: list) -> dict:
-    """Generate a Hinglish humor response paired with factual explanation."""
+async def generate_humor(content: str, verdict: str, claims: list,
+                          sensitive: bool = False, sensitivity_reason: str = "") -> dict:
+    """
+    Generate a Hinglish humor response paired with factual explanation.
+    Suppresses jokes for sensitive topics.
+    """
+    # SENSITIVITY FILTER: Don't generate jokes for sensitive content
+    if sensitive:
+        return {
+            "joke": "",
+            "explanation": "",
+            "suppressed": True,
+            "suppressed_reason": sensitivity_reason or "Content involves a sensitive topic.",
+        }
+
     try:
         claims_text = "\n".join(
             f"- {c.get('text', str(c))}"
@@ -65,11 +78,15 @@ async def generate_humor(content: str, verdict: str, claims: list) -> dict:
         return {
             "joke": data.get("joke", ""),
             "explanation": data.get("explanation", ""),
+            "suppressed": False,
+            "suppressed_reason": "",
         }
 
     except Exception as e:
         print(f"[HumorGenerator] Error: {e}")
         return {
             "joke": "Bhai, AI bhi confuse hai is news pe 🤖",
-            "explanation": "We couldn't generate a humor response, but the fact-check analysis above is still valid."
+            "explanation": "We couldn't generate a humor response, but the fact-check analysis above is still valid.",
+            "suppressed": False,
+            "suppressed_reason": "",
         }

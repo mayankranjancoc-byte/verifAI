@@ -77,7 +77,7 @@ export default function InputBar({ onSend, disabled }) {
         <input
           ref={fileRef}
           type="file"
-          accept="image/*,audio/*,video/*"
+          accept="image/*,audio/*,video/*,.pdf,.txt,application/pdf,text/plain"
           onChange={handleFileChange}
           style={{ display: 'none' }}
         />
