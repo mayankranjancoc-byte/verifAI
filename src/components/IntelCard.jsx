@@ -10,6 +10,33 @@ import EmotionBar from './EmotionBar'
 import HumorBlock from './HumorBlock'
 import ActionButtons from './ActionButtons'
 
+// Merge sources from evidence retriever + trust trail from verifier
+// This ensures "View Sources" always shows the real verified source links
+function _buildSourcesList(sources, trustTrail) {
+  const merged = []
+  const seenUrls = new Set()
+
+  // Add API sources first
+  for (const s of (sources || [])) {
+    const url = s?.url || s?.link || ''
+    if (url && !seenUrls.has(url)) {
+      seenUrls.add(url)
+      merged.push({ name: s.name || s.source || '', url })
+    }
+  }
+
+  // Add trust trail items (these have source names like WHO, Reuters, etc.)
+  for (const t of (trustTrail || [])) {
+    const url = t?.url || t?.link || ''
+    if (url && !seenUrls.has(url)) {
+      seenUrls.add(url)
+      merged.push({ name: t.source || t.name || '', url })
+    }
+  }
+
+  return merged
+}
+
 export default function IntelCard({ data, onReanalyze }) {
   if (!data) return null
 
@@ -100,7 +127,7 @@ export default function IntelCard({ data, onReanalyze }) {
 
         {/* Action Buttons */}
         <ActionButtons
-          sources={sources}
+          sources={_buildSourcesList(sources, trust_trail)}
           onReanalyze={() => onReanalyze(_originalQuery, _cached_claims)}
           timestamp={analysis_timestamp}
         />
