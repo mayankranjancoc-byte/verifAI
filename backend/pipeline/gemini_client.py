@@ -1,15 +1,18 @@
 """
 Shared AI client with Gemini primary + OpenRouter fallback.
-Uses Gemini REST API directly (no heavy SDK) to stay under Vercel's 250MB limit.
 Handles rate limits by trying Gemini first, then falling back to OpenRouter.
 """
 
 import os
+import time
 import json
 import httpx
+import google.generativeai as genai
 
-# Gemini REST API config
-GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
+_configured = False
+_models = {}
+
+# Gemini models to try first
 GEMINI_MODELS = [
     "gemini-2.0-flash-lite",
     "gemini-2.0-flash",
@@ -24,60 +27,56 @@ OPENROUTER_MODELS = [
 ]
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+MAX_RETRIES = 1
+RETRY_DELAY = 2
+
+
+def _configure_gemini():
+    global _configured
+    if not _configured:
+        api_key = os.environ.get("GEMINI_API_KEY", "")
+        if api_key:
+            genai.configure(api_key=api_key)
+            _configured = True
+
+
+def get_gemini_model(model_name: str):
+    """Get a cached Gemini model instance."""
+    _configure_gemini()
+    if model_name not in _models:
+        _models[model_name] = genai.GenerativeModel(model_name)
+    return _models[model_name]
 
 
 async def _try_gemini(prompt_text, temperature, max_tokens, multimodal_parts=None):
-    """Try Gemini models via REST API. Returns response text or raises."""
-    api_key = os.environ.get("GEMINI_API_KEY", "")
-    if not api_key:
-        raise Exception("Gemini not configured — GEMINI_API_KEY missing")
+    """Try Gemini models. Returns response text or raises on all failures."""
+    _configure_gemini()
+    if not _configured:
+        raise Exception("Gemini not configured")
 
-    # Build content parts
-    parts = [{"text": prompt_text}]
+    content = [prompt_text]
     if multimodal_parts:
-        for part in multimodal_parts:
-            if isinstance(part, dict):
-                parts.append(part)
-            elif hasattr(part, 'mime_type'):
-                # Handle legacy genai Image/Part objects (local dev only)
-                parts.append({"text": str(part)})
-
-    payload = {
-        "contents": [{"parts": parts}],
-        "generationConfig": {
-            "temperature": temperature,
-            "maxOutputTokens": max_tokens,
-        }
-    }
+        content = [prompt_text] + multimodal_parts
 
     for model_name in GEMINI_MODELS:
-        url = f"{GEMINI_API_BASE}/{model_name}:generateContent?key={api_key}"
         try:
-            async with httpx.AsyncClient(timeout=45.0) as client:
-                resp = await client.post(url, json=payload)
-
-                if resp.status_code == 429:
-                    print(f"[AI] Gemini {model_name} rate-limited, trying next...")
-                    continue
-
-                if resp.status_code != 200:
-                    print(f"[AI] Gemini {model_name} error {resp.status_code}: {resp.text[:300]}")
-                    continue
-
-                data = resp.json()
-                candidates = data.get("candidates", [])
-                if candidates:
-                    content = candidates[0].get("content", {})
-                    text_parts = content.get("parts", [])
-                    if text_parts:
-                        return text_parts[0].get("text", "").strip()
-
-                print(f"[AI] Gemini {model_name} returned no content")
-                continue
-
+            model = get_gemini_model(model_name)
+            response = model.generate_content(
+                content,
+                generation_config=genai.GenerationConfig(
+                    temperature=temperature,
+                    max_output_tokens=max_tokens,
+                )
+            )
+            return response.text.strip()
         except Exception as e:
-            print(f"[AI] Gemini {model_name} exception: {e}")
-            continue
+            err_str = str(e)
+            if "429" in err_str or "quota" in err_str.lower():
+                print(f"[AI] Gemini {model_name} rate-limited, trying next...")
+                continue
+            else:
+                print(f"[AI] Gemini {model_name} error: {e}")
+                continue
 
     raise Exception("All Gemini models exhausted or rate-limited")
 
@@ -91,7 +90,7 @@ async def _try_openrouter(prompt_text, temperature, max_tokens):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://verifai-app.vercel.app",
+        "HTTP-Referer": "http://localhost:5173",
         "X-Title": "VerifAI",
     }
 
@@ -139,10 +138,10 @@ async def generate_with_fallback(
     multimodal_parts=None,
 ):
     """
-    Generate content: try Gemini REST API first, then OpenRouter fallback.
+    Generate content: try Gemini first, then OpenRouter fallback.
     Returns the raw response text.
     """
-    # 1. Try Gemini (supports multimodal via REST)
+    # 1. Try Gemini (supports multimodal)
     try:
         return await _try_gemini(prompt, temperature, max_tokens, multimodal_parts)
     except Exception as gemini_err:

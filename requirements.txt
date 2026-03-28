@@ -1,9 +1,10 @@
-# Vercel Serverless — lightweight deps (under 250MB)
-# Uses Gemini REST API via httpx instead of heavy google-generativeai SDK
-# Heavy libs (PyMuPDF, Pillow, trafilatura) excluded; features gracefully degrade
+# Vercel Serverless — minimal deps only
+# Heavy libs like PyMuPDF and Pillow are excluded for the 250MB limit
+# File upload (PDF/Image) features will gracefully degrade
 
 fastapi==0.115.0
 httpx==0.28.0
+google-generativeai==0.8.0
 python-multipart==0.0.18
 python-dotenv==1.1.0
 beautifulsoup4==4.12.3
