@@ -2,6 +2,10 @@
 
 A single-screen, chat-based misinformation detection app that verifies claims across multiple real sources using AI-powered analysis.
 
+### 🚀 Live Deployments
+* **Frontend (React/Vite):** [https://fluffy-bombolone-5fa6b1.netlify.app/](https://fluffy-bombolone-5fa6b1.netlify.app/)
+* **Backend (FastAPI):** [https://verifai-9uho.onrender.com](https://verifai-9uho.onrender.com)
+
 ![VerifAI Screenshot](docs/screenshot.png)
 
 ## Features

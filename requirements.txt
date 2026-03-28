@@ -1,11 +1,11 @@
-# Vercel Serverless — minimal deps only
-# Heavy libs like PyMuPDF and Pillow are excluded for the 250MB limit
-# File upload (PDF/Image) features will gracefully degrade
+# Vercel Serverless dependencies
+# PyMuPDF is excluded to satisfy the 250MB size limit.
+# PDF processing is disabled; all other features work exactly as local.
 
 fastapi==0.115.0
-httpx==0.28.0
 google-generativeai==0.8.0
+httpx==0.28.0
 python-multipart==0.0.18
-python-dotenv==1.1.0
 beautifulsoup4==4.12.3
 langdetect==1.0.9
+python-dotenv==1.1.0
