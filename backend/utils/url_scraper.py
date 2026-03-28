@@ -4,7 +4,11 @@ Uses trafilatura for clean text extraction with fallback to BeautifulSoup.
 """
 
 import httpx
-import trafilatura
+try:
+    import trafilatura
+    HAS_TRAFILATURA = True
+except ImportError:
+    HAS_TRAFILATURA = False
 from bs4 import BeautifulSoup
 
 
@@ -26,12 +30,14 @@ async def scrape_url(url: str) -> dict | None:
             html = resp.text
 
             # Try trafilatura first (best quality extraction)
-            extracted = trafilatura.extract(
-                html,
-                include_comments=False,
-                include_tables=True,
-                output_format="txt",
-            )
+            extracted = None
+            if HAS_TRAFILATURA:
+                extracted = trafilatura.extract(
+                    html,
+                    include_comments=False,
+                    include_tables=True,
+                    output_format="txt",
+                )
 
             # Get title
             title = ""
