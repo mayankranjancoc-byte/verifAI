@@ -1,4 +1,5 @@
-# Render Blueprint — auto-configures the service on Render.com
+# Render Blueprint — VerifAI Backend
+# Frontend is deployed separately on Netlify: https://fluffy-bombolone-5fa6b1.netlify.app/
 # https://render.com/docs/blueprint-spec
 
 services:
@@ -18,5 +19,3 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: 3.11.11
-      - key: NODE_VERSION
-        value: 20.18.0

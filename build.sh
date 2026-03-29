@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Render Build Script — builds React frontend + installs Python deps
+# Render Build Script — Backend only (Frontend is deployed separately on Netlify)
+# https://fluffy-bombolone-5fa6b1.netlify.app/
 
 set -e
 
-echo "=== Installing Node.js dependencies ==="
-npm install
-
-echo "=== Building React frontend ==="
-npm run build
+echo "=== VerifAI Backend Build ==="
+echo "Python version: $(python --version)"
 
 echo "=== Installing Python dependencies ==="
 cd backend
+pip install --upgrade pip
 pip install -r requirements.txt
-cd ..
 
 echo "=== Build complete ==="
-echo "Frontend built to dist/"
-echo "Backend deps installed"
+echo "Backend ready. Start with: uvicorn main:app --host 0.0.0.0 --port \$PORT"
